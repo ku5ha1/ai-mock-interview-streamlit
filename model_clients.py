@@ -66,12 +66,34 @@ class GemmaLLM(SimpleLLM):
         try:
             from transformers import AutoTokenizer, AutoModelForCausalLM
             import torch
+            load_dotenv()
 
-            # Load the model from HuggingFace
-            self.tokenizer = AutoTokenizer.from_pretrained("google/gemma-1.1-1b-it")
-            self.model = AutoModelForCausalLM.from_pretrained("google/gemma-1.1-1b-it",
-                                                             device_map="auto",
-                                                             torch_dtype=torch.float16)
+            # Get Hugging Face token from environment
+            hf_token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
+            if not hf_token:
+                print("Warning: HUGGINGFACE_HUB_TOKEN not set. You may need to authenticate to access the model.")
+                print("Set HUGGINGFACE_HUB_TOKEN environment variable or run 'huggingface-cli login'")
+
+            # Resolve model id from environment with a safer default
+            # Known-good public IDs include: google/gemma-1.1-2b-it, google/gemma-2-2b-it
+            model_id = os.environ.get("GEMMA_MODEL_ID", "google/gemma-1.1-2b-it")
+
+            # Load the model from Hugging Face with token
+            try:
+                self.tokenizer = AutoTokenizer.from_pretrained(model_id, token=hf_token)
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    model_id,
+                    token=hf_token,
+                    device_map="auto",
+                    torch_dtype=torch.float16,
+                )
+            except Exception as e:
+                # Provide a clearer message for missing/blocked repos
+                raise RuntimeError(
+                    f"Failed to load Gemma model '{model_id}'. Ensure the repo exists, you have access, and your HUGGINGFACE_HUB_TOKEN is set. "
+                    "Try setting GEMMA_MODEL_ID to a public model like 'google/gemma-1.1-2b-it' or run 'huggingface-cli login'.\n"
+                    f"Original error: {e}"
+                )
 
         except ImportError:
             raise ImportError("You need to install transformers and torch to use Gemma.")
@@ -92,11 +114,17 @@ class GemmaLLM(SimpleLLM):
 
     async def _process_text(self, text): # Implement as asynchronous
         inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)
+        eos_token_id = self.tokenizer.eos_token_id
+        pad_token_id = eos_token_id if self.tokenizer.pad_token_id is None else self.tokenizer.pad_token_id
         outputs = self.model.generate(
             **inputs,
-            max_new_tokens=512,
-            temperature=0.7,
+            max_new_tokens=256,
+            do_sample=True,
+            temperature=0.8,
             top_p=0.95,
+            repetition_penalty=1.05,
+            eos_token_id=eos_token_id,
+            pad_token_id=pad_token_id,
         )
         response = self.tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
         return response
@@ -107,10 +135,18 @@ class DeepSeekLLM(SimpleLLM):
         try:
             from transformers import AutoTokenizer, AutoModelForCausalLM
             import torch
+            load_dotenv()
 
-            # Load the model from HuggingFace
-            self.tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/deepseek-coder-1.3b-base")
+            # Get Hugging Face token from environment
+            hf_token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
+            if not hf_token:
+                print("Warning: HUGGINGFACE_HUB_TOKEN not set. You may need to authenticate to access the model.")
+                print("Set HUGGINGFACE_HUB_TOKEN environment variable or run 'huggingface-cli login'")
+
+            # Load the model from HuggingFace with token
+            self.tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/deepseek-coder-1.3b-base", token=hf_token)
             self.model = AutoModelForCausalLM.from_pretrained("deepseek-ai/deepseek-coder-1.3b-base",
+                                                             token=hf_token,
                                                              torch_dtype=torch.float16,
                                                              device_map="auto")
 
@@ -133,11 +169,17 @@ class DeepSeekLLM(SimpleLLM):
 
     async def _process_text(self, text): # Implement as asynchronous
         inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)
+        eos_token_id = self.tokenizer.eos_token_id
+        pad_token_id = eos_token_id if self.tokenizer.pad_token_id is None else self.tokenizer.pad_token_id
         outputs = self.model.generate(
             **inputs,
-            max_new_tokens=512,
-            temperature=0.7,
+            max_new_tokens=256,
+            do_sample=True,
+            temperature=0.8,
             top_p=0.95,
+            repetition_penalty=1.05,
+            eos_token_id=eos_token_id,
+            pad_token_id=pad_token_id,
         )
         response = self.tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
         return response
