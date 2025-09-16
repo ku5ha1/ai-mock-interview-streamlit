@@ -21,7 +21,8 @@ logging.basicConfig(level=logging.INFO)
 async def start_interview(topic: str, model: str, max_questions: int):
     logging.info(f"Received /interview/start with topic: '{topic}', model: '{model}', max_questions: {max_questions}")
     session_id = str(uuid.uuid4())
-    llm = get_llm_client(model)
+    # Always use Gemini regardless of provided model
+    llm = get_llm_client("gemini")
     question_agent = create_question_generator_agent(llm)
 
     state = InterviewState(

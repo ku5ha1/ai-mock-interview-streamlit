@@ -4,4 +4,3 @@ python-dotenv
 streamlit
 langchain 
 langchain[google-genai]
-transformers[torch]
